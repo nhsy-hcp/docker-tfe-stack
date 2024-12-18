@@ -1,0 +1,64 @@
+# https://taskfile.dev
+version: '3'
+
+dotenv: ['.env']
+
+vars:
+  STACK_NAME:
+    sh: basename "`pwd`"
+
+tasks:
+  default:
+    preconditions:
+      - test -f .env
+      - test -f docker-compose.yml
+    aliases: ["up"]
+    cmd: docker compose up -d
+
+  down:
+    cmd: docker compose down
+
+  stop:
+    cmd: docker compose stop
+
+  logs:
+    cmd: docker compose logs -f
+
+  admin:
+    cmd: ./scripts/admin_new.sh
+
+  clean:
+    cmds:
+      - docker compose stop
+      - docker compose rm -vfs
+      - docker volume rm {{ .STACK_NAME }}_terraform-enterprise
+      - docker volume rm {{ .STACK_NAME }}_terraform-enterprise-cache
+      - docker volume rm {{.STACK_NAME }}_terraform-enterprise-logs-
+      - docker volume rm {{.STACK_NAME }}_grafana-data
+      - docker volume rm {{.STACK_NAME }}_loki-data
+      - docker volume rm {{.STACK_NAME }}_prometheus-data
+      - docker volume rm {{.STACK_NAME }}_promtail-data
+    ignore_error: true
+
+  shell:
+    cmd: docker compose exec tfe bash
+
+  status:
+    cmd: docker compose exec tfe tfe-health-check-status
+
+  ui:
+    cmds:
+      - |
+        open "https://$TFE_HOSTNAME"
+        echo "Grafana: http://localhost:3000"
+        echo "Prometheus: http://localhost:9090"
+
+  health:
+    cmd: curl -skv "https://$TFE_HOSTNAME/_health_check?full=1"
+
+  login:
+    cmd: terraform login $TFE_HOSTNAME
+
+  ngrok:
+    cmd: ngrok http https://localhost --domain=$TFE_HOSTNAME
+    desc: "Expose TFE to the internet using ngrok"

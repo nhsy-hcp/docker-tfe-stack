@@ -1,0 +1,116 @@
+services:
+  tfe:
+    image: images.releases.hashicorp.com/hashicorp/terraform-enterprise:v202409-3
+    container_name: ${COMPOSE_PROJECT_NAME}_tfe
+    restart: unless-stopped
+    platform: linux/amd64
+    environment:
+      #TFE_HOSTNAME: moved to env_file
+      TFE_OPERATIONAL_MODE: "disk"
+      TFE_ENCRYPTION_PASSWORD: "hashicorp"
+      TFE_DISK_CACHE_VOLUME_NAME: ${COMPOSE_PROJECT_NAME}_terraform-enterprise-cache
+      TFE_TLS_CERT_FILE: /etc/ssl/private/terraform-enterprise/cert.pem
+      TFE_TLS_KEY_FILE: /etc/ssl/private/terraform-enterprise/key.pem
+      TFE_TLS_CA_BUNDLE_FILE: /etc/ssl/private/terraform-enterprise/bundle.pem
+      TFE_METRICS_ENABLE: true
+      #TFE_LICENSE: moved to env_file
+    env_file: ".env"
+    cap_add:
+      - IPC_LOCK
+    read_only: true
+    tmpfs:
+      - /tmp:mode=01777
+      - /run
+#      - /var/log/terraform-enterprise
+    ports:
+#      - "80:80"
+      - "443:443"
+    volumes:
+      - type: bind
+        source: /var/run/docker.sock
+        target: /run/docker.sock
+      - type: bind
+        source: ./certs
+        target: /etc/ssl/private/terraform-enterprise
+      - type: volume
+        source: terraform-enterprise
+        target: /var/lib/terraform-enterprise
+      - type: volume
+        source: terraform-enterprise-cache
+        target: /var/cache/tfe-task-worker/terraform
+      - type: volume
+        source: terraform-enterprise-logs
+        target: /var/log/terraform-enterprise
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./volumes/grafana/datasources.yml:/etc/grafana/provisioning/datasources/datasources.yml:ro
+      - ./volumes/grafana/dashboards.yml:/etc/grafana/provisioning/dashboards/dashboards.yml:ro
+      - ./volumes/grafana/tfe_dashboard.json:/var/lib/grafana/dashboards/tfe_dashboard.json:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    depends_on:
+      - prometheus
+      - loki
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./volumes/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  loki:
+    image: grafana/loki:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_loki
+    restart: no
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./volumes/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki/data
+      - ./volumes/loki/loki_perm_fix.sh:/loki/loki_perm_fix.sh:ro
+#    command: -config.file=/etc/loki/loki.yml
+    entrypoint: /loki/loki_perm_fix.sh
+    user: root # Required for permission fix as Loki runs as user Loki by default
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: ${COMPOSE_PROJECT_NAME}_promtail
+    restart: unless-stopped
+    volumes:
+      - ./volumes/promtail/promtail.yml:/etc/promtail/promtail.yml:ro
+      - promtail-data:/promtail
+      - terraform-enterprise-logs:/mnt/terraform-enterprise-logs
+    command: -config.file=/etc/promtail/promtail.yml
+    depends_on:
+      - loki
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME}
+
+volumes:
+  loki-data:
+  grafana-data:
+  prometheus-data:
+  promtail-data:
+  terraform-enterprise:
+  terraform-enterprise-cache:
+  terraform-enterprise-logs:
