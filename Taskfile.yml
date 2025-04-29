@@ -28,12 +28,13 @@ tasks:
     cmd: ./scripts/admin_new.sh
 
   clean:
+    aliases: ["rm"]
     cmds:
       - docker compose stop
       - docker compose rm -vfs
       - docker volume rm {{ .STACK_NAME }}_terraform-enterprise
       - docker volume rm {{ .STACK_NAME }}_terraform-enterprise-cache
-      - docker volume rm {{.STACK_NAME }}_terraform-enterprise-logs-
+      - docker volume rm {{.STACK_NAME }}_terraform-enterprise-logs
       - docker volume rm {{.STACK_NAME }}_grafana-data
       - docker volume rm {{.STACK_NAME }}_loki-data
       - docker volume rm {{.STACK_NAME }}_prometheus-data
@@ -62,3 +63,16 @@ tasks:
   ngrok:
     cmd: ngrok http https://localhost --domain=$TFE_HOSTNAME
     desc: "Expose TFE to the internet using ngrok"
+
+  ngrok-v3:
+    cmd: ngrok http 443 --scheme=https --url=$TFE_HOSTNAME
+    desc: "Expose TFE to the internet using ngrok"
+
+  docker-login:
+    preconditions:
+      - |
+        test -f .env        
+        test -n "$TFE_LICENSE"
+    cmds:
+      - |
+        echo $TFE_LICENSE | docker login --username terraform images.releases.hashicorp.com --password-stdin

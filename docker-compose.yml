@@ -1,6 +1,6 @@
 services:
   tfe:
-    image: images.releases.hashicorp.com/hashicorp/terraform-enterprise:v202409-3
+    image: images.releases.hashicorp.com/hashicorp/terraform-enterprise:${TFE_VERSION:-v202504-1}
     container_name: ${COMPOSE_PROJECT_NAME}_tfe
     restart: unless-stopped
     platform: linux/amd64
